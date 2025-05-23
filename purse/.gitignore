@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-selfcheck.json
+pip-log.txt
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+coverage.xml
+*.coverage
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs & Local Data
+logs/*.log
+# logs/ (ignore directory only if it's never versioned, e.g. if it always contains logs)
+# For now, let's only ignore log files, not the directory itself, to allow an empty, versioned logs dir.
+# If config.yml specifies local_user_data or similar, add it here.
+# Based on config.yml structure in workplan:
+user_data/
+# local_user_data/ # (If this was a top-level dir)
+# local_settings.yml # (If such a file is used for non-versioned local overrides)
+
+# Search Index (Whoosh)
+# The path in config.yml is 'user_data/search_index', and 'user_data/' is already ignored.
+# If the index path was different or more specific patterns are needed:
+# search_index/
+# *.sqlite # If Whoosh uses SQLite directly and files are at root or unpredictable spots
+
+# Test results if any specific format
+*.test_results
+
+# Secrets that might be accidentally added (though they should be in user-specific configs not versioned)
+secrets.yml
+*.secret
+
+# Toga / Briefcase build artifacts (if any beyond standard Python dist/build)
+# Add specific briefcase build folders for macOS, Windows, Linux, Android, iOS if known
+# e.g. linux/
+#      macOS/
+#      windows/
+#      android/
+#      ios/
