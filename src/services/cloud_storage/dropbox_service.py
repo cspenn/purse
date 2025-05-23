@@ -269,6 +269,19 @@ class DropboxService(BaseCloudService):
             # The SDK should handle the refresh transparently if needed.
             await self._run_sync(self.dbx.users_get_current_account)
             
+            # NOTE: The Dropbox SDK (v11) handles token auto-refresh internally when
+            # initialized with a refresh token and app credentials. After a successful
+            # API call like the one above, the self.dbx instance uses the (potentially new)
+            # access token. However, the SDK does not expose an easy way to retrieve
+            # this newly acquired access token string or its new expiry time.
+            # Therefore, while the client is usable, the self.access_token and
+            # self.token_expiry_timestamp attributes (and thus the token info in keyring)
+            # might not reflect the absolute latest state after an SDK-internal auto-refresh.
+            # This is a limitation of the current SDK's public API for auto-refreshed tokens.
+            # This method confirms the client is usable; explicit saving of a *new* token string
+            # to keyring via _save_tokens_to_keyring is only feasible if a refresh mechanism
+            # *returns* new token details.
+            
             # After a successful call, if the SDK auto-refreshed, the new token and expiry
             # are managed internally by self.dbx. We need to extract them.
             # Unfortunately, the Dropbox SDK (v11) does not make it straightforward to get
