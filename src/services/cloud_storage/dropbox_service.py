@@ -19,50 +19,55 @@ logger = logging.getLogger(__name__)
 class DropboxService(BaseCloudService):
     PROVIDER_NAME = "Dropbox"
 
-    def __init__(self, 
-                 config_manager: 'ConfigManager', 
-                 access_token: Optional[str] = None, 
-                 refresh_token: Optional[str] = None,
-                 expires_at: Optional[int] = None): # Unix timestamp for expiry
-        super().__init__(config_manager, access_token, refresh_token)
+    def __init__(self, config_manager: 'ConfigManager'):
+        super().__init__(config_manager) # This loads tokens via _load_tokens_from_keyring()
         
         self.app_key: Optional[str] = self.config_manager.get('cloud_providers.dropbox.app_key')
         self.app_secret: Optional[str] = self.config_manager.get('cloud_providers.dropbox.app_secret')
         self.redirect_uri: Optional[str] = self.config_manager.get('cloud_providers.dropbox.redirect_uri')
         
-        self.expires_at = expires_at # Store when the current access_token expires
-
-        if not self.app_key or not self.app_secret: # App secret is needed for refresh
-            logger.error(f"{self.PROVIDER_NAME}: App key or app secret not configured. Some operations may fail.")
-            # Depending on strictness, could raise error.
+        if not self.app_key or not self.app_secret:
+            logger.error(f"{self.PROVIDER_NAME}: App key or app secret not configured. Refresh and some operations may fail.")
 
         self.dbx: Optional[dropbox.Dropbox] = None
+        self._reinitialize_client_with_loaded_tokens()
+
+    def _reinitialize_client_with_loaded_tokens(self) -> None:
+        """Initializes or re-initializes the Dropbox client (self.dbx) using stored tokens."""
         if self.access_token:
-            self.dbx = dropbox.Dropbox(oauth2_access_token=self.access_token)
+            logger.debug(f"{self.PROVIDER_NAME}: Reinitializing client with access token.")
+            self.dbx = dropbox.Dropbox(
+                oauth2_access_token=self.access_token,
+                oauth2_refresh_token=self.refresh_token, # Pass refresh token if available
+                app_key=self.app_key,                   # Needed for potential auto-refresh by SDK
+                app_secret=self.app_secret,             # Needed for potential auto-refresh by SDK
+                # Convert Unix timestamp to datetime object for SDK if it expects datetime
+                # The Dropbox SDK's oauth2_access_token_expiration expects a datetime object
+                oauth2_access_token_expiration=datetime.fromtimestamp(self.token_expiry_timestamp, timezone.utc) if self.token_expiry_timestamp else None
+            )
         elif self.refresh_token and self.app_key and self.app_secret:
-            # SDK will auto-refresh if constructed this way and token is expired/needed
-            logger.info(f"{self.PROVIDER_NAME}: Initializing with refresh token. Access token will be obtained on first call.")
+            logger.info(f"{self.PROVIDER_NAME}: Reinitializing client with refresh token only.")
             self.dbx = dropbox.Dropbox(
                 oauth2_refresh_token=self.refresh_token,
                 app_key=self.app_key,
                 app_secret=self.app_secret,
-                oauth2_access_token_expiration=self.expires_at # Pass expiry if known
+                oauth2_access_token_expiration=datetime.fromtimestamp(self.token_expiry_timestamp, timezone.utc) if self.token_expiry_timestamp else None
             )
-            # We might want to proactively call refresh_access_token or a simple API call here
-            # to ensure dbx is usable and to update self.access_token and self.expires_at.
         else:
-            logger.warning(f"{self.PROVIDER_NAME}: Not enough information to initialize Dropbox client (no access/refresh token or app credentials).")
+            self.dbx = None # No tokens, no client
+            logger.debug(f"{self.PROVIDER_NAME}: No tokens available, Dropbox client not initialized.")
 
     async def _run_sync(self, func, *args: Any, **kwargs: Any) -> Any:
         """Helper to run synchronous Dropbox SDK calls in a thread."""
-        # Before running, check if token might be expired and try to refresh if dbx is configured for it.
-        # The Dropbox SDK is supposed to handle this automatically if initialized with refresh token + app key/secret.
         if self.dbx is None:
-            logger.error(f"{self.PROVIDER_NAME}: Dropbox client not initialized. Cannot run function.")
-            raise ConnectionError("Dropbox client not initialized.") # Or a custom error
+            logger.warning(f"{self.PROVIDER_NAME}: Dropbox client not initialized. Attempting reinitialization.")
+            self._reinitialize_client_with_loaded_tokens() # Attempt to re-initialize
+            if self.dbx is None: # Still no client
+                logger.error(f"{self.PROVIDER_NAME}: Reinitialization failed. Dropbox client remains uninitialized.")
+                raise ConnectionError("Dropbox client not initialized after reattempt.")
 
-        # Check token expiry if expires_at is known
-        if self.expires_at and self.expires_at < time.time() - 60: # 60s buffer
+        # Check token expiry if token_expiry_timestamp is known
+        if self.token_expiry_timestamp and self.token_expiry_timestamp < time.time() - 60: # 60s buffer
             logger.info(f"{self.PROVIDER_NAME}: Access token may be expired. Attempting refresh.")
             if not await self.refresh_access_token(): # This will re-init self.dbx or update its token
                  raise AuthError("Token refresh failed or not possible.", user_message="Access token expired and refresh failed.")
@@ -214,27 +219,23 @@ class DropboxService(BaseCloudService):
         try:
             oauth_result = await self._run_sync(oauth_flow.finish, auth_code, code_verifier=code_verifier)
             
-            self.access_token = oauth_result.access_token
-            self.refresh_token = oauth_result.refresh_token # Might be None if not 'offline' type
-            self.user_id = oauth_result.account_id
-            self.expires_at = oauth_result.expires_at.timestamp() if oauth_result.expires_at else None # Convert datetime to Unix timestamp
+            token_dict_to_save = {
+                'access_token': oauth_result.access_token,
+                'refresh_token': oauth_result.refresh_token,
+                'user_id': oauth_result.account_id, # Dropbox specific user_id
+                'token_expiry_timestamp': oauth_result.expires_at.timestamp() if oauth_result.expires_at else None
+            }
+            self._save_tokens_to_keyring(token_dict_to_save) # This updates instance attributes
+            self._reinitialize_client_with_loaded_tokens()   # Re-init dbx with new tokens
 
-            # Re-initialize Dropbox client with new token
-            self.dbx = dropbox.Dropbox(
-                oauth2_access_token=self.access_token,
-                oauth2_refresh_token=self.refresh_token, # Store for auto-refresh
-                app_key=self.app_key, # Needed for auto-refresh
-                app_secret=self.app_secret, # Needed for auto-refresh
-                oauth2_access_token_expiration=self.expires_at
-            )
             logger.info(f"{self.PROVIDER_NAME}: Successfully exchanged code for token. User ID: {self.user_id}")
             
             return {
-                'access_token': self.access_token,
-                'refresh_token': self.refresh_token,
-                'user_id': self.user_id,
-                'expires_at': self.expires_at, # Unix timestamp
-                'scope': oauth_result.scope # String of scopes
+                'access_token': self.access_token,         # Now from instance, set by _save_tokens_to_keyring
+                'refresh_token': self.refresh_token,       # Now from instance
+                'user_id': self.user_id,                   # Now from instance
+                'expires_at': self.token_expiry_timestamp, # Use the timestamp from instance
+                'scope': oauth_result.scope                # String of scopes
             }
         except AuthError as e:
             logger.error(f"{self.PROVIDER_NAME}: AuthError during token exchange: {e}")

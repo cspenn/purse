@@ -28,80 +28,97 @@ logger = logging.getLogger(__name__)
 class GoogleDriveService(BaseCloudService):
     PROVIDER_NAME = "GoogleDrive"
 
-    def __init__(self, 
-                 config_manager: 'ConfigManager', 
-                 access_token: Optional[str] = None, 
-                 refresh_token: Optional[str] = None,
-                 token_uri: Optional[str] = None, # Specific to GDrive, from config
-                 client_id: Optional[str] = None, # Specific to GDrive, from config
-                 client_secret: Optional[str] = None, # Specific to GDrive, from config
-                 scopes: Optional[List[str]] = None, # Specific to GDrive, from config
-                 gdrive_user_id: Optional[str] = None, # If user_id is known e.g. from previous session
-                 # Note: 'expires_at' (unix timestamp) could also be passed if known from previous session
-                 # to help initialize self.creds.token_expiry (datetime object).
-                 token_expiry_iso: Optional[str] = None # ISO 8601 string for expiry
-                ):
-        super().__init__(config_manager, access_token, refresh_token)
-        self.user_id = gdrive_user_id # GDrive user ID, might be different from account email
+    def __init__(self, config_manager: 'ConfigManager'):
+        super().__init__(config_manager) # This loads tokens via _load_tokens_from_keyring()
 
-        self.client_id = client_id or self.config_manager.get('cloud_providers.google_drive.client_id')
-        self.client_secret = client_secret or self.config_manager.get('cloud_providers.google_drive.client_secret')
-        # self.project_id = self.config_manager.get('cloud_providers.google_drive.project_id') # Not directly used by flow from client_config
-        self.token_uri = token_uri or self.config_manager.get('cloud_providers.google_drive.token_uri', 'https://oauth2.googleapis.com/token')
-        self.auth_uri = self.config_manager.get('cloud_providers.google_drive.auth_uri', 'https://accounts.google.com/o/oauth2/auth')
-        self.redirect_uri = self.config_manager.get('cloud_providers.google_drive.redirect_uri') # Should be one from client_config
-        self.scopes = scopes or self.config_manager.get('cloud_providers.google_drive.scopes')
+        # Load Google Drive specific configurations
+        self.gdrive_client_id: Optional[str] = self.config_manager.get('cloud_providers.google_drive.client_id')
+        self.gdrive_client_secret: Optional[str] = self.config_manager.get('cloud_providers.google_drive.client_secret')
+        self.gdrive_token_uri: Optional[str] = self.config_manager.get('cloud_providers.google_drive.token_uri', 'https://oauth2.googleapis.com/token')
+        self.gdrive_auth_uri: Optional[str] = self.config_manager.get('cloud_providers.google_drive.auth_uri', 'https://accounts.google.com/o/oauth2/auth')
+        self.gdrive_redirect_uri: Optional[str] = self.config_manager.get('cloud_providers.google_drive.redirect_uri')
+        self.gdrive_scopes: Optional[List[str]] = self.config_manager.get('cloud_providers.google_drive.scopes')
 
-        if not all([self.client_id, self.client_secret, self.redirect_uri, self.scopes]):
-            logger.error(f"{self.PROVIDER_NAME}: Critical OAuth configuration missing (client_id, client_secret, redirect_uri, or scopes).")
+        if not all([self.gdrive_client_id, self.gdrive_client_secret, self.gdrive_redirect_uri, self.gdrive_scopes, self.gdrive_auth_uri, self.gdrive_token_uri]):
+            logger.error(f"{self.PROVIDER_NAME}: Critical OAuth configuration missing (client_id, client_secret, redirect_uri, scopes, auth_uri, or token_uri).")
             # Consider raising an error or ensuring service methods fail gracefully.
-
-        self.creds: Optional[google.oauth2.credentials.Credentials] = None
-        if self.access_token:
-            expiry_datetime = None
-            if token_expiry_iso:
-                try:
-                    expiry_datetime = datetime.fromisoformat(token_expiry_iso.replace('Z', '+00:00'))
-                except ValueError:
-                    logger.warning(f"Could not parse token_expiry_iso: {token_expiry_iso}")
-
-            self.creds = google.oauth2.credentials.Credentials(
-                token=self.access_token,
-                refresh_token=self.refresh_token,
-                token_uri=self.token_uri,
-                client_id=self.client_id,
-                client_secret=self.client_secret,
-                scopes=self.scopes,
-                expiry=expiry_datetime
-            )
         
+        self.creds: Optional[google.oauth2.credentials.Credentials] = None
         self._drive_service_instance: Optional['Resource'] = None
         self._app_root_folder_id: Optional[str] = None # Cache for resolved app root folder ID
+        self._current_oauth_flow_for_pkce: Optional[google_auth_oauthlib.flow.Flow] = None # For PKCE flow
+
+        self._reinitialize_client_with_loaded_tokens()
+
+    def _reinitialize_client_with_loaded_tokens(self) -> None:
+        """Initializes or re-initializes self.creds and invalidates self._drive_service_instance based on loaded tokens."""
+        if self.access_token: # self.access_token is now from keyring via BaseClass
+            expiry_datetime = None
+            if self.token_expiry_timestamp: # This is a float (Unix timestamp) from BaseClass
+                try:
+                    expiry_datetime = datetime.fromtimestamp(self.token_expiry_timestamp, timezone.utc)
+                except ValueError:
+                    logger.warning(f"{self.PROVIDER_NAME}: Could not parse token_expiry_timestamp: {self.token_expiry_timestamp}")
+
+            # Ensure all necessary parts for Credentials object are available
+            if not all([self.gdrive_client_id, self.gdrive_client_secret, self.gdrive_token_uri, self.gdrive_scopes]): # Added gdrive_scopes check
+                 logger.error(f"{self.PROVIDER_NAME}: Cannot initialize credentials. OAuth client config (ID, secret, token URI, scopes) missing.")
+                 self.creds = None
+            else:
+                try:
+                    self.creds = google.oauth2.credentials.Credentials(
+                        token=self.access_token,
+                        refresh_token=self.refresh_token, # From BaseClass
+                        token_uri=self.gdrive_token_uri, 
+                        client_id=self.gdrive_client_id, 
+                        client_secret=self.gdrive_client_secret, 
+                        scopes=self.gdrive_scopes, 
+                        expiry=expiry_datetime
+                    )
+                    logger.info(f"{self.PROVIDER_NAME}: Credentials object created/updated from loaded tokens.")
+                except Exception as e: # Catch potential errors during Credentials creation
+                    logger.error(f"{self.PROVIDER_NAME}: Error creating Credentials object: {e}", exc_info=True)
+                    self.creds = None
+        else:
+            self.creds = None
+            logger.info(f"{self.PROVIDER_NAME}: No access token found, credentials not configured.")
+
+        self._drive_service_instance = None # Invalidate service client, will be rebuilt on demand by _get_drive_service()
+        self._app_root_folder_id = None # Also invalidate cached app root ID as creds change might mean different user/root
 
     async def _get_drive_service(self) -> Optional['Resource']:
         if self._drive_service_instance:
-            # Basic check: if creds exist and seem valid (not expired, or have refresh token)
             if self.creds and (self.creds.valid or (self.creds.expired and self.creds.refresh_token)):
-                # Potentially refresh if close to expiry, though creds.refresh should handle it.
-                 pass # Assume valid or refreshable
-            else: # Credentials invalid and not refreshable
-                logger.error(f"{self.PROVIDER_NAME}: Credentials invalid and cannot be refreshed. Service unavailable.")
-                return None
-            return self._drive_service_instance
+                 pass 
+            else: 
+                logger.warning(f"{self.PROVIDER_NAME}: Credentials invalid or not refreshable. Service instance may be stale.")
+                # Don't return None yet, let it try to rebuild if creds are bad.
+            return self._drive_service_instance # Return cached instance if available, even if creds might be stale (will be checked below)
 
+        # Try to ensure creds are valid before building service
         if not self.creds:
-            logger.error(f"{self.PROVIDER_NAME}: No credentials available. Cannot build Drive service.")
-            return None
+            logger.info(f"{self.PROVIDER_NAME}: No credentials object. Attempting to reinitialize.")
+            self._reinitialize_client_with_loaded_tokens() # Try to build from keyring if possible
+            if not self.creds:
+                logger.error(f"{self.PROVIDER_NAME}: No credentials available after reinitialization attempt. Cannot build Drive service.")
+                return None
 
         if not self.creds.valid:
             if self.creds.expired and self.creds.refresh_token:
                 logger.info(f"{self.PROVIDER_NAME}: Credentials expired, attempting refresh.")
-                if not await self.refresh_access_token():
+                if not await self.refresh_access_token(): # refresh_access_token now handles _save_tokens & _reinitialize_client
                     logger.error(f"{self.PROVIDER_NAME}: Token refresh failed. Cannot build Drive service.")
+                    # self._delete_tokens_from_keyring() called by refresh_access_token on RefreshError
                     return None
-                # After successful refresh, self.creds should be updated and valid.
+                # After successful refresh, self.creds should be updated and valid by _reinitialize_client_with_loaded_tokens
+                if not self.creds or not self.creds.valid: # Check again
+                    logger.error(f"{self.PROVIDER_NAME}: Credentials still not valid after refresh attempt.")
+                    return None
             else:
                 logger.error(f"{self.PROVIDER_NAME}: Credentials not valid and no refresh token available. Cannot build Drive service.")
+                # Potentially stale tokens if loaded from keyring but are invalid and not refreshable
+                if not self.creds.refresh_token: # if no refresh token, these tokens are useless
+                    self._delete_tokens_from_keyring()
                 return None
         
         try:
@@ -240,29 +257,26 @@ class GoogleDriveService(BaseCloudService):
         )
 
     async def authenticate_url(self, state: Optional[str] = None) -> Tuple[str, str]:
-        if not all([self.client_id, self.client_secret, self.redirect_uri, self.scopes, self.auth_uri, self.token_uri]):
+        if not all([self.gdrive_client_id, self.gdrive_client_secret, self.gdrive_redirect_uri, self.gdrive_scopes, self.gdrive_auth_uri, self.gdrive_token_uri]):
             raise ValueError(f"{self.PROVIDER_NAME}: OAuth client configuration incomplete.")
 
         # Client config for from_client_config
         client_config = {
             "web": { # or "installed" if that's the app type
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "auth_uri": self.auth_uri,
-                "token_uri": self.token_uri,
-                "redirect_uris": [self.redirect_uri],
-                # "project_id": self.project_id, # Optional here
+                "client_id": self.gdrive_client_id,
+                "client_secret": self.gdrive_client_secret,
+                "auth_uri": self.gdrive_auth_uri,
+                "token_uri": self.gdrive_token_uri,
+                "redirect_uris": [self.gdrive_redirect_uri],
             }
         }
-        # For "installed" app type, redirect_uris might be like "urn:ietf:wg:oauth:2.0:oob" or "http://localhost"
-        # The key in client_config ("web" or "installed") should match your app registration type. Assume "web" for now.
         
         flow = google_auth_oauthlib.flow.Flow.from_client_config(
             client_config=client_config,
-            scopes=self.scopes,
+            scopes=self.gdrive_scopes,
             state=state
         )
-        flow.redirect_uri = self.redirect_uri # Ensure it's set on the flow instance
+        flow.redirect_uri = self.gdrive_redirect_uri # Ensure it's set on the flow instance
 
         # PKCE is handled by the library if code_challenge_method is specified or by default for installed apps.
         # For installed apps, it's often implicit. For web apps, explicit.
@@ -304,36 +318,45 @@ class GoogleDriveService(BaseCloudService):
         if flow:
             delattr(self, '_current_oauth_flow_for_pkce') # Clean up
         else: # Reconstruct flow if not stored (e.g. if PKCE verifier passed externally or not used)
-            client_config = { "web": { "client_id": self.client_id, "client_secret": self.client_secret,
-                                       "auth_uri": self.auth_uri, "token_uri": self.token_uri, 
-                                       "redirect_uris": [self.redirect_uri] }}
-            flow = google_auth_oauthlib.flow.Flow.from_client_config(client_config=client_config, scopes=self.scopes)
-            flow.redirect_uri = self.redirect_uri
+            client_config = { "web": { "client_id": self.gdrive_client_id, "client_secret": self.gdrive_client_secret,
+                                       "auth_uri": self.gdrive_auth_uri, "token_uri": self.gdrive_token_uri, 
+                                       "redirect_uris": [self.gdrive_redirect_uri] }}
+            flow = google_auth_oauthlib.flow.Flow.from_client_config(client_config=client_config, scopes=self.gdrive_scopes)
+            flow.redirect_uri = self.gdrive_redirect_uri
             if code_verifier: # If verifier was managed externally and passed in
                  setattr(flow, 'code_verifier', code_verifier)
 
-
         try:
-            # fetch_token is synchronous, needs to be run in a thread
-            # If PKCE was used, flow.code_verifier should be set (either from authenticate_url or passed code_verifier)
             await asyncio.to_thread(flow.fetch_token, code=auth_code)
             
-            self.creds = flow.credentials
-            self.access_token = self.creds.token
-            self.refresh_token = self.creds.refresh_token
-            self.user_id = self.creds.id_token.get('sub') if self.creds.id_token else None # 'sub' is standard OIDC subject (user ID)
+            current_creds = flow.credentials
             
-            self._drive_service_instance = None # Invalidate cached service instance
+            access_token_val = current_creds.token
+            refresh_token_val = current_creds.refresh_token
+            user_id_val = current_creds.id_token.get('sub') if hasattr(current_creds, 'id_token') and current_creds.id_token else None
+            expiry_timestamp_val = current_creds.expiry.timestamp() if current_creds.expiry else None
+            id_token_val = current_creds.id_token if hasattr(current_creds, 'id_token') else None
+            scopes_val = current_creds.scopes
 
-            logger.info(f"{self.PROVIDER_NAME}: Successfully exchanged code for token. User ID: {self.user_id}")
+            token_dict_to_save = {
+                'access_token': access_token_val,
+                'refresh_token': refresh_token_val,
+                'user_id': user_id_val,
+                'token_expiry_timestamp': expiry_timestamp_val,
+            }
+            
+            self._save_tokens_to_keyring(token_dict_to_save)
+            self._reinitialize_client_with_loaded_tokens()
+
+            logger.info(f"{self.PROVIDER_NAME}: Successfully exchanged code for token. User ID: {self.user_id or 'Not Provided'}")
             
             return {
-                'access_token': self.access_token,
-                'refresh_token': self.refresh_token,
-                'user_id': self.user_id,
-                'expires_at': self.creds.expiry.timestamp() if self.creds.expiry else None, # Unix timestamp
-                'id_token': self.creds.id_token, # Contains user info claims
-                'scopes': self.creds.scopes
+                'access_token': self.access_token, 
+                'refresh_token': self.refresh_token, 
+                'user_id': self.user_id, 
+                'expires_at': self.token_expiry_timestamp, 
+                'id_token': id_token_val, 
+                'scopes': scopes_val     
             }
         except Exception as e:
             logger.error(f"{self.PROVIDER_NAME}: Exception during token exchange: {e}", exc_info=True)
@@ -349,20 +372,34 @@ class GoogleDriveService(BaseCloudService):
             # refresh is synchronous
             await asyncio.to_thread(self.creds.refresh, google.auth.transport.requests.Request())
             
-            self.access_token = self.creds.token
-            # self.refresh_token usually stays the same unless rotated (rare for Google)
-            # self.creds.expiry is updated.
-            self._drive_service_instance = None # Invalidate cached service instance
+            new_access_token = self.creds.token
+            new_refresh_token = self.creds.refresh_token 
+            new_expiry_timestamp = self.creds.expiry.timestamp() if self.creds.expiry else None
+
+            token_dict_to_save = {
+                'access_token': new_access_token,
+                'refresh_token': new_refresh_token, 
+                'user_id': self.user_id, # Preserve existing user_id
+                'token_expiry_timestamp': new_expiry_timestamp
+            }
+            
+            self._save_tokens_to_keyring(token_dict_to_save)
+            self._reinitialize_client_with_loaded_tokens() 
+
             logger.info(f"{self.PROVIDER_NAME}: Access token refreshed successfully.")
-            return self.access_token
+            return self.access_token # Return the new access token from the instance
+            
         except google.auth.exceptions.RefreshError as e:
-            logger.error(f"{self.PROVIDER_NAME}: Failed to refresh access token: {e}. Re-authentication may be required.", exc_info=True)
-            self.creds = None # Invalidate credentials
-            self.access_token = None
-            self.refresh_token = None
+            logger.error(f"{self.PROVIDER_NAME}: Failed to refresh access token: {e}. Deleting tokens.", exc_info=True)
+            self._delete_tokens_from_keyring()
+            self.creds = None # Explicitly clear credentials
+            self._drive_service_instance = None # Invalidate service
             return None
         except Exception as e:
             logger.error(f"{self.PROVIDER_NAME}: Unexpected error during token refresh: {e}", exc_info=True)
+            # For unexpected errors, ensure creds are None so service rebuild fails cleanly.
+            self.creds = None
+            self._drive_service_instance = None
             return None
 
 

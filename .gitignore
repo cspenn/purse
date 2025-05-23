@@ -1,0 +1,151 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# Usually these files are written by a PyInstaller script; this is just an
+# example of what might be excluded if you choose to use PyInstaller
+# *.manifest
+# *.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyderworkspace
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Purse specific
+logs/*.log                 # Application logs (files, not the directory itself)
+!logs/.gitkeep             # Allow keeping the logs directory if it's empty via .gitkeep
+temp_markdown_handler_test/ # Test directory for markdown_handler
+temp_logs_for_testing/     # Test directory for logger_setup
+*.test_results
+coverage.xml
+device_settings.yml        # Local, non-synced device settings
+                           # (This was already handled by FileSystemManager pathing,
+                           # but good to explicitly ignore if ever at project root by mistake)
+
+# Whoosh search index directory (assuming it's created under app_data_dir,
+# which should be outside the repo. If it were inside repo, it would be ignored)
+# search_index/ (if it was relative to project root)
+
+# OAuth tokens if ever accidentally stored in files (SHOULD USE KEYRING)
+*.token
+*_token.json
+client_secret*.json # Except if it's a template/example one
+!client_secret.example.json
+
+# If config.yml was user-specific and not a template (it IS a template in this project)
+# config.yml
