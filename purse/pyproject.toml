@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "purse"
+version = "0.1.0"
+description = "A self-hosted, open-source 'read-it-later' application."
+authors = ["Christopher Penn <example@example.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+toga = "^0.4.2"
+httpx = {extras = ["http2"], version = "^0.27.0"}
+PyYAML = "^6.0.1"
+trafilatura = "^1.9.0"
+PyMuPDF = "^1.24.1"
+python-docx = "^1.1.2"
+whoosh = "^2.7.4"
+tqdm = "^4.66.2"
+keyring = "^25.2.1"
+dropbox = "^11.36.2"
+google-api-python-client = "^2.130.0"
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.0"
+msal = "^1.28.0"
+beautifulsoup4 = "^4.12.3"
+pyttsx3 = "^2.90"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.7"
+mypy = "^1.10.0"
+ruff = "^0.4.4"
+pre-commit = "^3.7.1"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "S", "B", "A", "C4", "T20", "SIM", "PTH", "ISC"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

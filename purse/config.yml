@@ -1,0 +1,68 @@
+# Purse Application Configuration (config.yml)
+# This file contains local, non-synced application settings.
+
+logging:
+  log_level: "DEBUG"  # Default log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  logs_dir: "logs"    # Relative to project root or app data dir (app_data_dir is preferred by FileSystemManager later)
+  max_log_files: 10   # Number of old log files to keep
+  log_format_console: "%(asctime)s %(emoji_level)s %(name)s:%(lineno)d - %(message)s"
+  log_format_file: "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+paths:
+  # Path for local data storage, relative to the OS-idiomatic user data directory.
+  # FileSystemManager will resolve this to something like:
+  # Linux: ~/.local/share/purse/user_data/purse_library
+  # macOS: ~/Library/Application Support/purse/user_data/purse_library
+  # Windows: %APPDATA%\Purse\purse\user_data/purse_library (or Local %APPDATA%)
+  local_data_dir_fragment: "user_data/purse_library" # Fragment appended to app_data_dir
+  local_search_index_dir_fragment: "user_data/search_index" # Fragment appended to app_data_dir
+  
+  # .purse_config will be inside the main sync folder in the cloud.
+  # This defines the name of that config subdir.
+  synced_config_dir_name: ".purse_config"
+  synced_settings_filename: "settings.yml"
+
+# Default developer notification URL (can be overridden in synced settings.yml)
+developer_notifications_url: "https://www.christopherspenn.com/purse/notifications.json" # Ensure it's a JSON endpoint
+
+# Retry mechanism defaults
+retry:
+  max_attempts: 5
+  initial_delay_seconds: 1.0 # Float for time.sleep
+  max_delay_seconds: 60.0  # Float
+
+# archive.is or similar service (can be overridden in synced settings.yml)
+fallback_archive_service_url_template: "https://archive.is/{url}" # {url} will be replaced
+
+# Pocket Importer settings
+pocket_importer:
+  reparse_pocket_html: true # Whether to re-parse HTML content from Pocket export (though export is link-only)
+
+# Cloud Provider App Credentials (User should override these if they build from source for their own use)
+# These are placeholders and should ideally be configured by the user during setup for their own cloud apps.
+# For initial development, they might point to a developer's test app.
+cloud_providers:
+  dropbox:
+    app_key: "YOUR_DROPBOX_APP_KEY_PLACEHOLDER"
+    app_secret: "YOUR_DROPBOX_APP_SECRET_PLACEHOLDER"
+    redirect_uri: "http://localhost:8765/dropbox_oauth_callback" 
+  google_drive:
+    client_id: "YOUR_GOOGLE_CLIENT_ID_PLACEHOLDER"
+    client_secret: "YOUR_GOOGLE_CLIENT_SECRET_PLACEHOLDER"
+    project_id: "YOUR_GOOGLE_PROJECT_ID_PLACEHOLDER"
+    scopes:
+      - "https://www.googleapis.com/auth/drive.file"
+      - "https://www.googleapis.com/auth/userinfo.email"
+      - "https://www.googleapis.com/auth/userinfo.profile"
+    redirect_uri: "http://localhost:8765/gdrive_oauth_callback"
+  onedrive: # Microsoft Graph
+    client_id: "YOUR_ONEDRIVE_CLIENT_ID_PLACEHOLDER"
+    # client_secret: "YOUR_ONEDRIVE_CLIENT_SECRET_PLACEHOLDER" # Typically not used for public clients like desktop apps
+    authority: "https://login.microsoftonline.com/common" 
+    scopes:
+      - "Files.ReadWrite.AppFolder" # Or Files.ReadWrite
+      - "offline_access"
+      - "User.Read"
+    redirect_uri: "http://localhost:8765/onedrive_oauth_callback"
+    graph_api_endpoint_v1: "https://graph.microsoft.com/v1.0"
