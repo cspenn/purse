@@ -3,6 +3,15 @@ from toga.style import Pack
 from toga.style.pack import COLUMN, ROW, LEFT, RIGHT, CENTER, BOLD # For potential future use in UI
 import logging
 from pathlib import Path # For type hinting if needed, though mostly handled by services
+from typing import TYPE_CHECKING, List, Optional, Set # Added TYPE_CHECKING and other used types
+
+if TYPE_CHECKING:
+    from src.models.article import Article
+    # Forward declare services that PurseApp holds, if needed for type hints within PurseApp methods
+    # For example, if _fetch_and_store_article_thumbnail needed to hint self.fs_manager type explicitly.
+    # However, attribute annotations in __init__ or startup usually cover this.
+    # from purse.services.file_system_manager import FileSystemManager
+    # from purse.services.http_client import HttpClient
 
 # Core application components
 from purse.config_manager import ConfigManager
@@ -184,6 +193,196 @@ class PurseApp(toga.App):
     #         await self.sync_manager.synchronize_articles()
     #     logger.info("Initial background tasks complete.")
 
+
+    async def trigger_pocket_import(self, export_html_filepath: Path) -> None: # Added as per workplan
+        """
+        Triggers the import of articles from a Pocket export HTML file.
+        Processes each article by fetching thumbnails, saving, and indexing.
+        """
+        if not self.pocket_importer or not self.fs_manager or not self.search_manager:
+            logger.error("Cannot start Pocket import, core services (PocketImporter, FileSystemManager, or SearchManager) not initialized.")
+            if self.app_state.status_label_widget:
+                self.app_state.status_label_widget.text = "Error: Import services not ready."
+            return
+
+        logger.info(f"Starting Pocket import from: {export_html_filepath}")
+        if self.app_state.status_label_widget:
+            self.app_state.status_label_widget.text = f"Starting Pocket import from {export_html_filepath.name}..."
+
+        successful_imports = 0
+        failed_or_skipped_articles = 0 # Renamed for clarity, counts articles that were yielded but failed to save, or were skipped by importer.
+
+        # Placeholder for a UI progress callback
+        # def ui_progress_callback(current, total):
+        #    if self.app_state.status_label_widget:
+        #        self.app_state.status_label_widget.text = f"Importing Pocket: {current}/{total}"
+        #    logger.debug(f"Pocket import progress: {current}/{total}")
+
+        try:
+            # The pocket_importer.import_from_pocket_file is now an async generator
+            async for article_from_importer in self.pocket_importer.import_from_pocket_file(
+                export_html_filepath, 
+                # progress_callback=ui_progress_callback # Pass UI callback if implemented
+            ):
+                try:
+                    logger.debug(f"Processing yielded article from Pocket: '{article_from_importer.title}'")
+                    # 1. Fetch and store thumbnail (if potential URL exists)
+                    await self._fetch_and_store_article_thumbnail(article_from_importer)
+
+                    # 2. Save article to file system
+                    saved_path = self.fs_manager.save_article(article_from_importer)
+                    
+                    if saved_path:
+                        logger.info(f"Pocket import: Article '{article_from_importer.title}' saved to {saved_path}")
+                        # 3. Add/Update article in search index
+                        self.search_manager.add_or_update_article(article_from_importer)
+                        successful_imports += 1
+                        
+                        # 4. Update AppState and UI (placeholders)
+                        # self.app_state.current_article_list.insert(0, article_from_importer) # Add to top
+                        # self.app_state.all_tags_in_library.update(article_from_importer.tags or [])
+                        # self.refresh_ui_article_list() # Placeholder for UI update method
+                        logger.debug(f"Pocket import: Successfully processed and saved '{article_from_importer.title}'.")
+                    else:
+                        failed_or_skipped_articles += 1
+                        logger.warning(f"Pocket import: Failed to save article '{article_from_importer.title}'.")
+                except Exception as e_article: # Catch errors during processing of a single article
+                    failed_or_skipped_articles += 1
+                    logger.error(f"Pocket import: Error processing article '{article_from_importer.title if article_from_importer else 'unknown'}': {e_article}", exc_info=True)
+
+            logger.info(f"Pocket import finished. Successfully imported: {successful_imports} articles. Failed/Skipped articles: {failed_or_skipped_articles}.")
+            if self.app_state.status_label_widget:
+                self.app_state.status_label_widget.text = f"Pocket import complete. Imported: {successful_imports}, Failed/Skipped: {failed_or_skipped_articles}."
+            # self.refresh_ui_article_list() # Placeholder: Refresh UI after all imports
+
+        except Exception as e_import_process: # Catch errors in the import_from_pocket_file generator itself or setup
+            logger.error(f"Error during Pocket import process: {e_import_process}", exc_info=True)
+            if self.app_state.status_label_widget:
+                self.app_state.status_label_widget.text = "Pocket import failed critically."
+
+    async def process_new_url_submission(self, url_to_add: str) -> None: # Added as per workplan (Phase 1, Section 2.2)
+        """
+        Processes a new URL submitted by the user, including parsing, thumbnailing, saving, and indexing.
+        """
+        if not self.content_parser or not self.fs_manager or not self.search_manager:
+            logger.error("Cannot process new URL, core services (ContentParser, FileSystemManager, or SearchManager) not initialized.")
+            if self.app_state.status_label_widget: # Update UI
+                self.app_state.status_label_widget.text = "Error: Services not ready for URL processing."
+            # Potentially show a more user-facing error dialog
+            return
+
+        logger.info(f"Processing new URL submission: {url_to_add}")
+        if self.app_state.status_label_widget: # Update UI
+            self.app_state.status_label_widget.text = f"Processing URL: {url_to_add}..."
+
+        parsed_article: Optional['Article'] = None # Ensure it's defined for logging in case of parsing error
+        try:
+            parsed_article = await self.content_parser.parse_url(url_to_add)
+
+            if parsed_article:
+                # 1. Fetch and store thumbnail (if potential URL exists)
+                # This modifies parsed_article in place (sets thumbnail_url_local)
+                logger.debug(f"Fetching thumbnail for new URL submission: {parsed_article.title}")
+                await self._fetch_and_store_article_thumbnail(parsed_article)
+
+                # 2. Save article to file system (now includes local thumbnail path in YAML)
+                logger.debug(f"Saving article from new URL submission: {parsed_article.title}")
+                saved_path = self.fs_manager.save_article(parsed_article)
+                
+                if saved_path:
+                    logger.info(f"New article '{parsed_article.title}' (from URL {url_to_add}) saved to {saved_path}")
+                    
+                    # 3. Add/Update article in search index
+                    logger.debug(f"Indexing new article: {parsed_article.title}")
+                    self.search_manager.add_or_update_article(parsed_article)
+                    
+                    # 4. Update AppState and UI (placeholders)
+                    # self.app_state.current_article_list.insert(0, parsed_article) # Add to top
+                    # self.app_state.all_tags_in_library.update(parsed_article.tags or [])
+                    # self.refresh_ui_article_list() # Placeholder for UI update method
+                    logger.info(f"Successfully added and indexed: {parsed_article.title}")
+                    if self.app_state.status_label_widget: # Update UI
+                        self.app_state.status_label_widget.text = f"Article added: {parsed_article.title}"
+                else:
+                    logger.error(f"Failed to save newly parsed article: {parsed_article.title} from URL {url_to_add}")
+                    if self.app_state.status_label_widget: # Update UI
+                        self.app_state.status_label_widget.text = f"Error saving: {parsed_article.title}"
+                    # Potentially show a user-facing error dialog
+            else:
+                logger.error(f"Failed to parse URL: {url_to_add} (ContentParserService returned None)")
+                if self.app_state.status_label_widget: # Update UI
+                    self.app_state.status_label_widget.text = f"Error parsing URL: {url_to_add}"
+                # Potentially show a user-facing error dialog
+        
+        except Exception as e: # Catch any other unexpected errors during the process
+            title_for_log = parsed_article.title if parsed_article else "Unknown article"
+            logger.error(f"Unexpected error processing URL '{url_to_add}' for article '{title_for_log}': {e}", exc_info=True)
+            if self.app_state.status_label_widget: # Update UI
+                self.app_state.status_label_widget.text = "An unexpected error occurred while adding URL."
+            # Potentially show a user-facing error dialog
+
+    async def _fetch_and_store_article_thumbnail(self, article: 'Article') -> None:
+        """
+        Fetches a potential thumbnail image for the article and stores it locally.
+        Updates article.thumbnail_url_local if successful.
+        Clears article.potential_thumbnail_source_url after attempting.
+        """
+        if not article.potential_thumbnail_source_url:
+            logger.debug(f"No potential thumbnail URL for article '{article.title}'. Skipping thumbnail fetch.")
+            return
+
+        if not self.http_client or not self.fs_manager:
+            logger.error("HttpClient or FileSystemManager not available. Cannot fetch thumbnail.")
+            # Clear the transient URL even if services are missing, as we can't process it.
+            article.potential_thumbnail_source_url = None
+            return
+        
+        # FileSystemManager.get_thumbnail_path uses article.local_path.
+        # If article.local_path is not set yet (e.g., new article not yet saved),
+        # fs_manager.get_thumbnail_path and fs_manager.save_thumbnail need to handle this.
+        # The current fs_manager.get_thumbnail_path can derive a prospective path.
+        # This is generally okay as fs_manager.save_thumbnail will use this path.
+
+        logger.info(f"Attempting to fetch thumbnail for '{article.title}' from: {article.potential_thumbnail_source_url}")
+        try:
+            # Fetch image (ensure HttpClient's get_url with is_html_content=False to bypass HTML size limits)
+            image_response = await self.http_client.get_url(
+                article.potential_thumbnail_source_url, 
+                is_html_content=False # This is an image, not an HTML page
+            )
+            image_bytes = image_response.content # Get bytes from response
+
+            # Optional validation/resizing (not in scope for this iteration per workplan)
+            # if image_bytes:
+            #     from PIL import Image
+            #     from io import BytesIO
+            #     try:
+            #         img = Image.open(BytesIO(image_bytes))
+            #         # img.thumbnail((THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_HEIGHT))
+            #         # output_buffer = BytesIO()
+            #         # img.save(output_buffer, format="JPEG", quality=85)
+            #         # image_bytes = output_buffer.getvalue()
+            #     except Exception as img_e:
+            #         logger.warning(f"Could not process image for thumbnail: {img_e}")
+            #         image_bytes = None # Do not save if processing failed
+
+            if image_bytes:
+                # save_thumbnail now directly updates article.thumbnail_url_local
+                # and returns the relative path, or None if save failed.
+                relative_thumb_path = self.fs_manager.save_thumbnail(article, image_bytes)
+                if relative_thumb_path:
+                    logger.info(f"Thumbnail saved for article '{article.title}' at relative path: {relative_thumb_path}")
+                    # article.thumbnail_url_local is updated by fs_manager.save_thumbnail
+                else:
+                    logger.warning(f"Failed to save thumbnail for article '{article.title}' (FileSystemManager.save_thumbnail returned None).")
+            else:
+                logger.warning(f"No image bytes obtained for thumbnail of article '{article.title}'.")
+
+        except Exception as e:
+            logger.error(f"Error fetching or saving thumbnail for article '{article.title}' from '{article.potential_thumbnail_source_url}': {e}", exc_info=True)
+        finally:
+            # Always clear the transient URL after attempting to fetch, regardless of success.
+            article.potential_thumbnail_source_url = None
 
     def _load_device_specific_settings(self) -> None:
         """Loads device-specific settings (e.g., seen notifications, window state)."""
