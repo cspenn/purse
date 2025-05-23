@@ -28,13 +28,15 @@ class HttpClient:
         # The workplan for http_client (section 11) shows self.retry_config = get_retry_config(self.config_manager)
         # in __init__. This is good practice.
         self.retry_config = common.get_retry_config(self.config_manager)
+        self.max_html_size_bytes = self.config_manager.get('content_limits.max_html_size_bytes', 10 * 1024 * 1024) # Default 10MB
 
     async def get_url(
         self,
         url: str,
         headers: Optional[Dict[str, str]] = None,
         params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None # Per-request timeout
+        timeout: Optional[float] = None, # Per-request timeout
+        is_html_content: bool = True # New parameter
     ) -> httpx.Response:
         """
         Fetches content from a URL with retry logic.
@@ -73,6 +75,22 @@ class HttpClient:
                     params=params,
                     timeout=effective_timeout 
                 )
+
+                if is_html_content:
+                    content_length_str = response.headers.get('Content-Length')
+                    if content_length_str:
+                        try:
+                            content_length = int(content_length_str)
+                            if content_length > self.max_html_size_bytes:
+                                # Close the response before raising to free up resources
+                                await response.aclose()
+                                logger.warning(f"Content-Length {content_length} for {url} exceeds limit {self.max_html_size_bytes}. Raising error.")
+                                raise httpx.HTTPError(f"Content too large: {content_length} bytes exceeds limit {self.max_html_size_bytes}. URL: {url}")
+                        except ValueError:
+                            logger.warning(f"Could not parse Content-Length header '{content_length_str}' for {url}.")
+                    # else: # Content-Length header missing. Cannot check size before download.
+                    #    logger.debug(f"Content-Length header missing for {url}. Proceeding without pre-download size check.")
+
                 response.raise_for_status() # Raise HTTPStatusError for 4xx/5xx responses
                 logger.info(f"🟢 Successfully fetched {url}, status: {response.status_code}")
                 return response

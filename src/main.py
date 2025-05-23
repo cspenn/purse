@@ -286,45 +286,19 @@ class PurseApp(toga.App):
         logger.debug("Initializing cloud service and SyncManager...")
         provider_name = self.config_manager.get('cloud.provider_name')
         
-        # These tokens and cache should ideally be loaded securely, e.g., from keyring or a secure store.
-        # ConfigManager.get() might fetch from such a store if designed to.
-        # For now, assume they are plain text in settings.yml if configured.
-        access_token = self.config_manager.get('cloud.tokens.access_token') 
-        refresh_token = self.config_manager.get('cloud.tokens.refresh_token')
-        # For Dropbox:
-        dbx_expires_at = self.config_manager.get('cloud.tokens.dropbox.expires_at') # Unix timestamp
-        # For OneDrive (MSAL):
-        msal_cache_str = self.config_manager.get('cloud.tokens.onedrive.msal_cache')
-        msal_home_account_id = self.config_manager.get('cloud.tokens.onedrive.home_account_id')
-        # For Google Drive:
-        gdrive_token_uri = self.config_manager.get('cloud_providers.google_drive.token_uri') # from main config
-        gdrive_client_id = self.config_manager.get('cloud_providers.google_drive.client_id')
-        gdrive_client_secret = self.config_manager.get('cloud_providers.google_drive.client_secret')
-        gdrive_scopes = self.config_manager.get('cloud_providers.google_drive.scopes')
-        # GDrive token_expiry_iso might be stored if available from credentials object
-        gdrive_token_expiry_iso = self.config_manager.get('cloud.tokens.google_drive.token_expiry_iso')
-
+        # Cloud service constructors will now load their own tokens/cache from keyring via BaseCloudService logic.
+        # No need to fetch individual token parts here anymore.
 
         user_cloud_root_path = self.config_manager.get('cloud.user_root_folder_path', '/Apps/Purse') # Default if not in settings
 
         if provider_name:
             logger.info(f"Configured cloud provider: {provider_name}. Initializing client...")
             if provider_name == DropboxService.PROVIDER_NAME:
-                self.cloud_service = DropboxService(
-                    self.config_manager, access_token=access_token, refresh_token=refresh_token, expires_at=dbx_expires_at
-                )
+                self.cloud_service = DropboxService(self.config_manager)
             elif provider_name == GoogleDriveService.PROVIDER_NAME:
-                self.cloud_service = GoogleDriveService(
-                    self.config_manager, access_token=access_token, refresh_token=refresh_token,
-                    token_uri=gdrive_token_uri, client_id=gdrive_client_id, client_secret=gdrive_client_secret,
-                    scopes=gdrive_scopes, token_expiry_iso=gdrive_token_expiry_iso
-                    # gdrive_user_id might be part of token claims or get_user_info(), not explicitly stored/passed here
-                )
+                self.cloud_service = GoogleDriveService(self.config_manager)
             elif provider_name == OneDriveService.PROVIDER_NAME:
-                self.cloud_service = OneDriveService(
-                    self.config_manager, msal_cache_str=msal_cache_str, home_account_id=msal_home_account_id
-                    # MSAL uses its cache, so direct access/refresh tokens are less critical in constructor
-                )
+                self.cloud_service = OneDriveService(self.config_manager)
             else:
                 logger.error(f"Unsupported cloud provider configured: '{provider_name}'. Sync will be disabled.")
                 self.app_state.cloud_provider_name = f"Unsupported: {provider_name}"

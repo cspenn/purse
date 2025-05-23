@@ -39,6 +39,12 @@ fallback_archive_service_url_template: "https://archive.is/{url}" # {url} will b
 pocket_importer:
   reparse_pocket_html: true # Whether to re-parse HTML content from Pocket export (though export is link-only)
 
+# Content processing limits
+content_limits:
+  max_html_size_bytes: 10485760  # 10 MB
+  max_pdf_size_bytes: 52428800   # 50 MB
+  max_docx_size_bytes: 20971520  # 20 MB
+
 # Cloud Provider App Credentials (User should override these if they build from source for their own use)
 # These are placeholders and should ideally be configured by the user during setup for their own cloud apps.
 # For initial development, they might point to a developer's test app.

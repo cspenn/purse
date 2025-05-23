@@ -3,6 +3,9 @@ from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator, TYPE_CHECKI
 from pathlib import Path
 import logging
 from dataclasses import dataclass
+import keyring
+import json
+# from purse.utils import constants # Import handled in _get_keyring_service_name
 
 if TYPE_CHECKING:
     from purse.config_manager import ConfigManager # For type hinting
@@ -33,15 +36,17 @@ class BaseCloudService(ABC):
     """
     PROVIDER_NAME: str = "AbstractCloudProvider" # Should be overridden by subclasses
 
-    def __init__(self, config_manager: 'ConfigManager', access_token: Optional[str] = None, refresh_token: Optional[str] = None):
+    def __init__(self, config_manager: 'ConfigManager'):
         self.config_manager = config_manager
-        self.access_token = access_token
-        self.refresh_token = refresh_token
+        self.access_token: Optional[str] = None
+        self.refresh_token: Optional[str] = None
+        self.token_expiry_timestamp: Optional[float] = None # Store expiry as Unix timestamp
         
         # Default application root folder in the cloud. User might override this via settings.
         # It's the base path under which this application will store its data.
         self.root_folder_path: str = "/Apps/Purse" 
         self.user_id: Optional[str] = None # Cloud provider's user ID, often obtained during auth
+        self._load_tokens_from_keyring()
 
     @abstractmethod
     async def authenticate_url(self, state: Optional[str] = None) -> Tuple[str, str]:
@@ -75,6 +80,13 @@ class BaseCloudService(ABC):
             - 'expires_in' (int, seconds)
             - 'user_id' (str, optional, provider-specific user identifier)
             - Potentially other fields like 'scope', 'token_type'.
+        
+        Implementations of this method MUST:
+        1. Extract token details (access_token, refresh_token, expiry, user_id).
+        2. Construct a dictionary with these details.
+        3. Call `self._save_tokens_to_keyring(token_dict)` to persist them.
+        4. Set `self.user_id` on the instance.
+        5. Call `self._reinitialize_client_with_loaded_tokens()` to update the client.
         """
         pass
 
@@ -86,6 +98,12 @@ class BaseCloudService(ABC):
         
         Returns:
             The new access token if successful, otherwise None.
+        
+        Implementations of this method, upon successful token refresh, MUST:
+        1. Update `self.access_token`, `self.refresh_token` (if changed), and `self.token_expiry_timestamp`.
+        2. Construct a dictionary with the new token details.
+        3. Call `self._save_tokens_to_keyring(new_token_dict)`.
+        4. Call `self._reinitialize_client_with_loaded_tokens()`.
         """
         pass
 
@@ -221,6 +239,118 @@ class BaseCloudService(ABC):
             CloudFileMetadata if the item exists, None if not found or on error.
         """
         pass
+
+    @abstractmethod
+    def _reinitialize_client_with_loaded_tokens(self) -> None:
+        """
+        Called after tokens are loaded from keyring or updated.
+        Subclasses should use this method to re-initialize their specific HTTP client
+        (e.g., self.dbx for Dropbox, self.creds for GoogleDrive) using the token
+        attributes now set on the instance (self.access_token, self.refresh_token, etc.).
+        """
+        pass
+
+    # --- Keyring Interaction Methods ---
+
+    def _get_keyring_service_name(self) -> str:
+        """Generates a unique service name for keyring based on provider and app ID."""
+        # Assuming constants.APP_ID is available. If not, get 'app_id' from config_manager as fallback.
+        # For robustness, check if constants module and APP_ID exist or handle gracefully.
+        try:
+            from purse.utils import constants as app_constants
+            app_id_val = self.config_manager.get('app_id', app_constants.APP_ID)
+        except (ImportError, AttributeError):
+            app_id_val = self.config_manager.get('app_id', 'PurseAppGenericID') # Fallback if constants not found
+            logger.warning("Could not import constants.APP_ID for keyring service name. Using configured or generic app_id.")
+        return f"{app_id_val}_{self.PROVIDER_NAME}"
+
+    def _load_tokens_from_keyring(self) -> None:
+        """Loads tokens from keyring and sets them on the instance."""
+        service_name = self._get_keyring_service_name()
+        # Keyring username: use self.user_id if available, else a generic placeholder.
+        # This is important because keyring stores passwords against a service/username pair.
+        # If user_id is set *after* initial load (e.g. from first token exchange),
+        # subsequent loads might use a different keyring_username if not handled.
+        # For now, assume we might not have user_id on first load.
+        keyring_username = self.user_id or f"{self.PROVIDER_NAME}_default_user" 
+        
+        try:
+            token_bundle_str = keyring.get_password(service_name, keyring_username)
+            if token_bundle_str:
+                token_data = json.loads(token_bundle_str)
+                self.access_token = token_data.get('access_token')
+                self.refresh_token = token_data.get('refresh_token')
+                self.token_expiry_timestamp = token_data.get('token_expiry_timestamp')
+                loaded_user_id = token_data.get('user_id')
+                
+                if loaded_user_id and not self.user_id:
+                    self.user_id = loaded_user_id
+                    # If user_id was just loaded, and it differs from the placeholder keyring_username,
+                    # it implies tokens might have been saved under a more specific user_id later.
+                    # This simple load won't find them. Complex multi-account handling is outside current scope.
+                    # Assume for now that if user_id becomes known, it's consistent.
+                
+                logger.info(f"{self.PROVIDER_NAME}: Tokens loaded from keyring for service '{service_name}', user '{keyring_username}'.")
+                # After loading, the specific service needs to re-initialize its client
+                self._reinitialize_client_with_loaded_tokens()
+            else:
+                logger.info(f"{self.PROVIDER_NAME}: No tokens found in keyring for service '{service_name}', user '{keyring_username}'.")
+        except Exception as e:
+            logger.error(f"{self.PROVIDER_NAME}: Error loading tokens from keyring: {e}", exc_info=True)
+
+    def _save_tokens_to_keyring(self, token_data_to_save: Dict[str, Any]) -> None:
+        """Saves the provided token bundle to keyring."""
+        service_name = self._get_keyring_service_name()
+        # When saving, self.user_id should ideally be known (e.g. from token exchange).
+        # If self.user_id was just set from token_data_to_save, use that.
+        keyring_username = token_data_to_save.get('user_id', self.user_id) or f"{self.PROVIDER_NAME}_default_user"
+
+        # Prepare bundle, ensuring all expected keys are present, even if None
+        bundle_to_store = {
+            'access_token': token_data_to_save.get('access_token'),
+            'refresh_token': token_data_to_save.get('refresh_token'),
+            'token_expiry_timestamp': token_data_to_save.get('token_expiry_timestamp'),
+            'user_id': token_data_to_save.get('user_id') # Persist user_id with tokens
+        }
+
+        if not bundle_to_store['access_token']:
+            logger.warning(f"{self.PROVIDER_NAME}: Attempted to save tokens to keyring, but access token is missing in provided data.")
+            return
+
+        try:
+            keyring.set_password(service_name, keyring_username, json.dumps(bundle_to_store))
+            logger.info(f"{self.PROVIDER_NAME}: Tokens saved to keyring for service '{service_name}', user '{keyring_username}'.")
+            # Update current instance's tokens from the saved data
+            self.access_token = bundle_to_store['access_token']
+            self.refresh_token = bundle_to_store['refresh_token']
+            self.token_expiry_timestamp = bundle_to_store['token_expiry_timestamp']
+            if bundle_to_store['user_id'] and not self.user_id: # Update instance user_id if it was missing
+                 self.user_id = bundle_to_store['user_id']
+            elif bundle_to_store['user_id'] and self.user_id != bundle_to_store['user_id']:
+                 logger.warning(f"{self.PROVIDER_NAME}: User ID changed during token save. Old: {self.user_id}, New: {bundle_to_store['user_id']}")
+                 self.user_id = bundle_to_store['user_id']
+
+        except Exception as e:
+            logger.error(f"{self.PROVIDER_NAME}: Error saving tokens to keyring: {e}", exc_info=True)
+            
+    def _delete_tokens_from_keyring(self) -> None:
+        """Deletes tokens from keyring for the current user_id or default."""
+        service_name = self._get_keyring_service_name()
+        keyring_username = self.user_id or f"{self.PROVIDER_NAME}_default_user"
+        try:
+            keyring.delete_password(service_name, keyring_username)
+            logger.info(f"{self.PROVIDER_NAME}: Tokens deleted from keyring for service '{service_name}', user '{keyring_username}'.")
+        except keyring.errors.PasswordDeleteError: # Specific exception for password not found
+            logger.info(f"{self.PROVIDER_NAME}: No tokens found in keyring to delete for service '{service_name}', user '{keyring_username}'.")
+        except Exception as e:
+            logger.error(f"{self.PROVIDER_NAME}: Error deleting tokens from keyring: {e}", exc_info=True)
+        finally:
+            # Clear tokens from current instance as well
+            self.access_token = None
+            self.refresh_token = None
+            self.token_expiry_timestamp = None
+            # Optionally clear self.user_id too, depending on logout strategy
+            # self.user_id = None 
 
     # --- Concrete Methods ---
 
