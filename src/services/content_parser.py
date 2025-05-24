@@ -28,12 +28,12 @@ except ImportError:
     DocxDocument = None # type: ignore # Placeholder
 
 # Local imports
-from purse.services.http_client import HttpClient
-from purse.models.article import Article
-from purse.utils import common, constants # For generate_uuid_from_url, estimate_reading_time, etc.
+from src.services.http_client import HttpClient
+from src.models.article import Article
+from src.utils import common, constants # For generate_uuid_from_url, estimate_reading_time, etc.
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -390,4 +390,3 @@ class ContentParserService:
         text = "\n".join(line for line in lines if line)
         return text.strip()
 
-```

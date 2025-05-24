@@ -3,15 +3,15 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime # Not directly used here, but common.py functions return datetime
 
 # Assuming constants.py and common.py are in purse.utils
-from purse.utils import constants
-from purse.utils.common import generate_uuid, get_current_timestamp_iso, parse_iso_timestamp
+from src.utils import constants
+from src.utils.common import generate_uuid, get_current_timestamp_iso, parse_iso_timestamp
 
 @dataclass(slots=True)
 class Article:
     # Core metadata from PRD 5.2, as specified in workplan section 10
-    id: str = field(default_factory=generate_uuid)
     original_url: str # Mandatory, no default factory
     title: str        # Mandatory, no default factory
+    id: str = field(default_factory=generate_uuid)
 
     pocket_id: Optional[str] = None
     author: Optional[List[str]] = field(default_factory=list) # Allow multiple authors
@@ -208,4 +208,3 @@ class Article:
     # def add_highlight(self, highlighted_text: str, surrounding_text_context: Optional[str] = None):
     #     """ This would be more complex, needing to find where to insert ==highlighted_text== """
     #     pass
-```

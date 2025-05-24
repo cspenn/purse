@@ -10,10 +10,10 @@ import os # For os.path.splitext in sanitize_filename
 from typing import Callable, Any, TypeVar, Coroutine, Dict, TYPE_CHECKING
 
 # Assuming constants.py is in purse.utils
-from purse.utils.constants import WORDS_PER_MINUTE 
+from src.utils.constants import WORDS_PER_MINUTE
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager # For type hinting ConfigManager
+    from src.config_manager import ConfigManager # For type hinting ConfigManager
 
 logger = logging.getLogger(__name__)
 

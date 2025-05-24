@@ -9,10 +9,10 @@ from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator, TYPE_CHECKI
 from pathlib import Path
 import time # For time.time() for expires_at
 
-from purse.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
+from src.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -521,4 +521,3 @@ class DropboxService(BaseCloudService):
             logger.error(f"{self.PROVIDER_NAME}: Failed to get metadata for {api_path}: {e}")
             return None
 
-```

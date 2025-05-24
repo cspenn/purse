@@ -3,13 +3,13 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Set, TYPE_CHECKING
 
-from purse.services.http_client import HttpClient
-from purse.utils import common # For get_current_timestamp_iso
+from src.services.http_client import HttpClient
+from src.utils import common # For get_current_timestamp_iso
 
 # Type hints for services to avoid circular imports at runtime
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
-    from purse.services.file_system_manager import FileSystemManager
+    from src.config_manager import ConfigManager
+    from src.services.file_system_manager import FileSystemManager
     try:
         from toga import App
     except ImportError:
@@ -186,10 +186,7 @@ class NotificationService:
                 logger.error(f"🛑 Failed to show Toga system notification: {e}. Falling back to console log.", exc_info=True)
                 self._log_notification_to_console(title, message, level) # Fallback
         else:
-            if self.toga_app and (not hasattr(self.toga_app, 'main_window') or not self.toga_app.main_window):
-                 logger.warning("Toga app instance available, but main_window is not set. Logging notification to console.")
-            else: # self.toga_app is None
-                 logger.info("Toga app instance not available. Logging notification to console.")
+            logger.info("Toga app or main_window not available. Logging notification to console.")
             self._log_notification_to_console(title, message, level)
 
     def _log_notification_to_console(self, title: str, message: str, level: str):
@@ -202,4 +199,3 @@ class NotificationService:
         else: # info
             logger.info(log_message)
 
-```

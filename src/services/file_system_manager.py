@@ -3,14 +3,14 @@ import shutil # shutil might be needed for more complex operations like rmtree, 
 from pathlib import Path
 import logging
 import yaml # For device settings
-from typing import Optional, List, Union, Dict, TYPE_CHECKING
+from typing import Optional, List, Union, Dict, Any, TYPE_CHECKING
 
-from purse.models.article import Article
-from purse.services.markdown_handler import MarkdownHandler
-from purse.utils import common # For sanitize_filename
+from src.models.article import Article
+from src.services.markdown_handler import MarkdownHandler
+from src.utils import common # For sanitize_filename
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
     # It's good practice to guard Toga import for non-GUI environments or tests,
     # though for type checking it's fine.
     try:
@@ -327,5 +327,3 @@ class FileSystemManager:
             logger.info(f"🟢 Device settings saved to {self.local_device_settings_path}")
         except Exception as e:
             logger.error(f"🛑 Error saving device settings to {self.local_device_settings_path}: {e}")
-
-```

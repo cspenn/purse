@@ -7,16 +7,16 @@ import logging # Ensure logging is imported
 
 from bs4 import BeautifulSoup # For parsing Pocket's HTML export
 
-from purse.models.article import Article
-from purse.services.content_parser import ContentParserService
+from src.models.article import Article
+from src.services.content_parser import ContentParserService
 # FileSystemManager is removed as a direct dependency based on the workplan for this refactor
-# from purse.services.file_system_manager import FileSystemManager 
-from purse.services.search_manager import SearchManager
-from purse.utils import constants, common
+# from src.services.file_system_manager import FileSystemManager
+from src.services.search_manager import SearchManager
+from src.utils import constants, common
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
-    # from purse.main import PurseApp # Not needed if app instance isn't passed to __init__
+    from src.config_manager import ConfigManager
+    # from src.main import PurseApp # Not needed if app instance isn't passed to __init__
 
 logger = logging.getLogger(__name__)
 
@@ -182,5 +182,3 @@ class PocketImporterService:
         logger.info(f"Pocket import processing complete for {total_items} items.")
         # Return values (counts) are removed as this is now an async generator.
         # The caller will iterate and decide how to count successes/failures.
-
-```

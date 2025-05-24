@@ -3,11 +3,11 @@ import asyncio
 import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from purse.utils import common # For exponential_backoff_retry, get_retry_config
-from purse.utils import constants # For DEFAULT_USER_AGENT
+from src.utils import common # For exponential_backoff_retry, get_retry_config
+from src.utils import constants # For DEFAULT_USER_AGENT
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 

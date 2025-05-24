@@ -26,6 +26,9 @@ google-auth-oauthlib = "^1.2.0"
 msal = "^1.28.0"
 beautifulsoup4 = "^4.12.3"
 pyttsx3 = "^2.90"
+pathy = "^0.11.0"
+markdownify = "^1.1.0"
+chardet = "^5.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
@@ -45,6 +48,10 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+packages = [
+    { include = "src" }
+]
 
 [build-system]
 requires = ["poetry-core"]

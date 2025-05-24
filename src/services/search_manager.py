@@ -1,6 +1,7 @@
 import whoosh.index as index
 from whoosh.fields import Schema, TEXT, ID, KEYWORD, DATETIME, BOOLEAN, NUMERIC
-from whoosh.qparser import MultifieldParser, QueryParser, GtLtParser, FuzzyTermPlugin, WildcardPlugin
+from whoosh.qparser import MultifieldParser, QueryParser, FuzzyTermPlugin, WildcardPlugin
+from whoosh.qparser.plugins import GtLtPlugin # Import the plugin
 from whoosh.analysis import StemmingAnalyzer
 from whoosh.writing import AsyncWriter, WhooshError # For concurrent writes
 import logging
@@ -9,12 +10,12 @@ from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime # For type hinting, not direct use in this file beyond what Whoosh needs
 
 # Assuming common.py is in purse.utils for parse_iso_timestamp
-from purse.utils import common, constants
-from purse.models.article import Article
-from purse.services.markdown_handler import MarkdownHandler # For highlight extraction
+from src.utils import common, constants
+from src.models.article import Article
+from src.services.markdown_handler import MarkdownHandler # For highlight extraction
 
 if TYPE_CHECKING:
-    from purse.services.file_system_manager import FileSystemManager
+    from src.services.file_system_manager import FileSystemManager
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,7 @@ class SearchManager:
                 # PRD 5.4: "Boolean operators (AND, OR, NOT), phrase searching."
                 # QueryParser by default supports AND, OR, NOT, phrases.
                 parser = MultifieldParser(fields_to_search, schema=self.SCHEMA)
-                parser.add_plugin(GtLtParser())         # For date/numeric range searches (e.g. saved_date:>YYYY-MM-DD)
+                parser.add_plugin(GtLtPlugin())         # For date/numeric range searches (e.g. saved_date:>YYYY-MM-DD)
                 parser.add_plugin(FuzzyTermPlugin())    # For fuzzy searches (e.g. term~)
                 parser.add_plugin(WildcardPlugin())     # For wildcard searches (e.g. wild*card)
                 # Consider adding NgramWordAnalyzer or similar for partial word matches if needed later.
@@ -378,5 +379,3 @@ if __name__ == '__main__':
         logger.info(f"Cleaned up temporary index directory: {temp_index_path.parent}")
     except Exception as e:
         logger.error(f"Error cleaning up temp directory: {e}")
-
-```

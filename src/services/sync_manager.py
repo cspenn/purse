@@ -7,15 +7,15 @@ from typing import Dict, Optional, List, Set, Tuple, TYPE_CHECKING, AsyncGenerat
 from dataclasses import dataclass
 
 # Assuming BaseCloudService and CloudFileMetadata are in base_cloud_service.py
-from purse.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
-from purse.services.file_system_manager import FileSystemManager
-from purse.services.markdown_handler import MarkdownHandler
-from purse.models.article import Article
-from purse.services.search_manager import SearchManager
-from purse.utils import constants # For SYNC_CONFLICT_LOG_FILENAME
+from src.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
+from src.services.file_system_manager import FileSystemManager
+from src.services.markdown_handler import MarkdownHandler
+from src.models.article import Article
+from src.services.search_manager import SearchManager
+from src.utils import constants # For SYNC_CONFLICT_LOG_FILENAME
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -326,4 +326,4 @@ class SyncManager:
         # else: Neither exists, no action. (App might create default local one on next save by ConfigManager)
         logger.info("Settings.yml sync attempt complete.")
 
-```
+

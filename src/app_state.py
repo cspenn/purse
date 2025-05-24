@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Set # Dict might be for current_search_results if not List[Article]
 
 # Assuming Article model is defined and can be imported
-from purse.models.article import Article
+from src.models.article import Article
 # Assuming constants for defaults are available
-from purse.utils import constants
+from src.utils import constants
 
 @dataclass
 class ReadingPreferences:
@@ -54,5 +54,3 @@ class AppState:
     # - current_filter_criteria: Optional[Dict[str, Any]] = None
     # - is_offline_mode: bool = False # Though offline-first is a principle
     # - active_cloud_service_client: Optional[Any] = None # If storing the client instance here (less common)
-
-```

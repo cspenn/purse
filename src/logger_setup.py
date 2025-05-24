@@ -2,17 +2,17 @@ import logging
 import logging.handlers
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 import os # Required for os.path.getmtime for sorting log files
 
 # Conditional import for ConfigManager to avoid circular dependency at runtime
 # if actual type checking is needed. For a .py file, can often just import.
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 # Assuming constants.py is in purse.utils
 # Adjust import path if necessary based on project structure
-from purse.utils import constants
+from src.utils import constants
 
 class EmojiFormatter(logging.Formatter):
     """
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     
     # Create a dummy constants.py if it's not found (e.g. running standalone)
     try:
-        from purse.utils import constants as test_constants
+        from src.utils import constants as test_constants
     except ImportError:
         print("Mocking constants for standalone test...")
         class MockConstants:

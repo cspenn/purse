@@ -4,8 +4,8 @@ import logging
 import re # For extract_highlights
 from typing import Optional, List, Tuple # Tuple might not be strictly needed based on current methods
 
-from purse.models.article import Article
-from purse.utils import constants
+from src.models.article import Article
+from src.utils import constants
 # common.py is not directly used by MarkdownHandler as per workplan spec for this file,
 # but Article.from_dict and .to_dict might use functions from common.py internally.
 

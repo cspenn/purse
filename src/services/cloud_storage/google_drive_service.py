@@ -12,10 +12,10 @@ from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator, TYPE_CHECKI
 from pathlib import Path
 import mimetypes # For guessing MIME type during upload
 
-from purse.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
+from src.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
     # Define Resource type alias for clarity, from googleapiclient.discovery.Resource
     Resource = Any 
 
@@ -826,4 +826,3 @@ class GoogleDriveService(BaseCloudService):
         logger.info(f"{self.PROVIDER_NAME}: App root folder '{self.root_folder_path}' ensured (final ID: {self._app_root_folder_id}).")
         return True
 
-```

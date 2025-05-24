@@ -8,7 +8,7 @@ import json
 # from purse.utils import constants # Import handled in _get_keyring_service_name
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager # For type hinting
+    from src.config_manager import ConfigManager # For type hinting
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +257,7 @@ class BaseCloudService(ABC):
         # Assuming constants.APP_ID is available. If not, get 'app_id' from config_manager as fallback.
         # For robustness, check if constants module and APP_ID exist or handle gracefully.
         try:
-            from purse.utils import constants as app_constants
+            from src.utils import constants as app_constants
             app_id_val = self.config_manager.get('app_id', app_constants.APP_ID)
         except (ImportError, AttributeError):
             app_id_val = self.config_manager.get('app_id', 'PurseAppGenericID') # Fallback if constants not found
@@ -525,4 +525,3 @@ class BaseCloudService(ABC):
             logger.error(f"{self.PROVIDER_NAME}: Error ensuring app root folder '{self.root_folder_path}' exists: {e}", exc_info=True)
             return False
 
-```

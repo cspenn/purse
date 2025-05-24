@@ -9,12 +9,12 @@ from pathlib import Path
 from urllib.parse import quote # For encoding path segments in URLs
 import time # Needed for expires_at calculation in exchange_code_for_token
 
-from purse.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
-from purse.services.cloud_storage.exceptions import AuthError, ConfigurationError, ServiceError
+from src.services.cloud_storage.base_cloud_service import BaseCloudService, CloudFileMetadata
+from src.services.cloud_storage.exceptions import AuthError, ConfigurationError, ServiceError
 
 
 if TYPE_CHECKING:
-    from purse.config_manager import ConfigManager
+    from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 

@@ -14,30 +14,30 @@ if TYPE_CHECKING:
     # from purse.services.http_client import HttpClient
 
 # Core application components
-from purse.config_manager import ConfigManager
-from purse.logger_setup import setup_logging # setup_logging needs ConfigManager
-from purse.app_state import AppState, ReadingPreferences # ReadingPreferences for type hinting
-from purse.utils import constants, common # For APP_NAME, APP_ID, etc.
+from src.config_manager import ConfigManager
+from src.logger_setup import setup_logging # setup_logging needs ConfigManager
+from src.app_state import AppState, ReadingPreferences # ReadingPreferences for type hinting
+from src.utils import constants, common # For APP_NAME, APP_ID, etc.
 
 # Services
-from purse.services.http_client import HttpClient
-from purse.services.file_system_manager import FileSystemManager
-from purse.services.content_parser import ContentParserService
-from purse.services.search_manager import SearchManager
-from purse.services.pocket_importer import PocketImporterService
-from purse.services.notification_service import NotificationService
-from purse.services.tts_service import TTSService
-from purse.services.sync_manager import SyncManager
+from src.services.http_client import HttpClient
+from src.services.file_system_manager import FileSystemManager
+from src.services.content_parser import ContentParserService
+from src.services.search_manager import SearchManager
+from src.services.pocket_importer import PocketImporterService
+from src.services.notification_service import NotificationService
+from src.services.tts_service import TTSService
+from src.services.sync_manager import SyncManager
 
 # Cloud Service Implementations (import all, but only instantiate configured one)
-from purse.services.cloud_storage.base_cloud_service import BaseCloudService
-from purse.services.cloud_storage.dropbox_service import DropboxService
-from purse.services.cloud_storage.google_drive_service import GoogleDriveService
-from purse.services.cloud_storage.onedrive_service import OneDriveService
+from src.services.cloud_storage.base_cloud_service import BaseCloudService
+from src.services.cloud_storage.dropbox_service import DropboxService
+from src.services.cloud_storage.google_drive_service import GoogleDriveService
+from src.services.cloud_storage.onedrive_service import OneDriveService
 
 # UI Placeholders (not fully used in this step, but good for structure)
-# from purse.ui.main_app_window import MainAppWindow # Example if UI was more built out
-# from purse.ui import commands as app_commands # Example
+# from src.ui.main_app_window import MainAppWindow # Example if UI was more built out
+# from src.ui import commands as app_commands # Example
 
 # Get a module-level logger after setup_logging is called.
 # This will be configured by setup_logging.
@@ -620,5 +620,3 @@ def main():
 if __name__ == '__main__':
     # This starts the Toga application event loop.
     main().main_loop()
-
-```
